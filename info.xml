@@ -1,0 +1,26 @@
+<?xml version="1.0.beta1"?>
+<extension key="biz.jmaconsulting.eer" type="module">
+  <file>eer</file>
+  <name>Enhanced Event Registration</name>
+  <description>Enables parents to sign up their kids for an event and provide two emergency contacts. Five contacts (plus one for each additional child registered) are created or matched, with appropriate permissioned relationships and address sharing between them.</description>
+  <urls>
+  	<url desc="Support">https://github.com/JMAConsulting/biz.jmaconsulting.eer/issues</url>
+  	<url desc="Main Extension Page">
+  		https://github.com/JMAConsulting/biz.jmaconsulting.eer/blob/master/README.md
+  	</url></urls>
+  <license>AGPL-3.0</license>
+  <maintainer>
+    <author>JMA Consulting</author>
+    <email>info@jmaconsulting.biz</email>
+  </maintainer>
+  <releaseDate>2012-08-20</releaseDate>
+  <version>1.0.beta1</version>
+  <develStage>beta</develStage>
+  <compatibility>
+    <ver>4.2</ver>
+  </compatibility>
+  <comments>Two parents with shared or different addresses, two emergency contacts with separate addresses, one or more children being registered, and a household contact are created and / or updated using the normal CiviCRM duplicate identification approaches. A checkbox allows the second parent to be identified as a spouse of the first parent. Appropriate permissions for one contact editting another are also created (eg parents can edit kids' info). The core and custom fields collected for each contact are determined by editting the fields in custom profiles. Module was authored by Mayur Jadhav and Joe Murray of JMA Consulting with the generous sponsorship of Pogstone.</comments>
+  <civix>
+    <namespace>CRM/Eer</namespace>
+  </civix>
+</extension>
