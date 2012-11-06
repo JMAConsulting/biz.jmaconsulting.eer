@@ -1,4 +1,4 @@
-<?xml version="1.0.beta1"?>
+<?xml version="1.0.beta1" encoding="UTF-8" ?>
 <extension key="biz.jmaconsulting.eer" type="module">
   <file>eer</file>
   <name>Enhanced Event Registration</name>

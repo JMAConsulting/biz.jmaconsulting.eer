@@ -37,11 +37,13 @@ is_enhanced tinyint(4) default 0,
 PRIMARY KEY(id)
 );
 
-CREATE TABLE civicrm_event_enhanced_profile (
-  id INT NOT NULL AUTO_INCREMENT,
-  event_id INT NOT NULL,
-  uf_group_id INT NOT NULL,
-  contact_position varchar(255) CHARACTER SET utf8 COLLATE utf8_unicode_ci DEFAULT NULL,
+CREATE TABLE IF NOT EXISTS civicrm_event_enhanced_profile (
+  id int(11) NOT NULL AUTO_INCREMENT,
+  event_id int(11) NOT NULL,
+  uf_group_id int(11) NOT NULL,
+  area int(10) DEFAULT NULL COMMENT 'NULL means hidden, 1 means top, 2 means bottom',
+  weight int(10) DEFAULT NULL COMMENT 'within an area, weight determines position',
+  label varchar(255) CHARACTER SET utf8 COLLATE utf8_unicode_ci DEFAULT NULL COMMENT 'Override of the Profile''s title',
   shares_address tinyint(4) NOT NULL DEFAULT 0,
   PRIMARY KEY (id)
 );
