@@ -679,28 +679,28 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
                     }
                   }
                 }
-                if ( $profKey == $profArray['Other Parent Or Guardian'] && $is_shareAdd ) {
-                  $addressGet['contact_id'] =  $createContactsResult1['id'];
-                  $addressGet['version']    =  3;
-                  $addressGet['location_type_id'] = 1;
-                  $result = civicrm_api( 'address','get' , $addressGet );
-                  $otherParams[$profKey]['api.address.create']['master_id'] = $result['id'];
-                  $shareOtherParams = $otherParams[$profKey];
-                  $shareOtherParams['id'] = $pContactIds[$pID];
-                  $shareOtherParams['version'] = 3;
-                  $childAddress = civicrm_api( 'contact', 'create', $shareOtherParams );
-                }
-                $contactData = $$createContactsParams;
-                if ( !empty($contactsCustomParams) ) {
-                  $contactData = array_merge($contactData, $contactsCustomParams );
-                }
-                if( !empty( $otherParams )) {
-                  $contactData = array_merge($contactData, $otherParams[$profKey] );
-                }
-            
-                $contactsCustomParams = array();
-                $$createContactsResult = civicrm_api( 'contact', 'create', $contactData );
               }
+              if ( $profKey == $profArray['Other Parent Or Guardian'] && $is_shareAdd ) {
+                $addressGet['contact_id'] =  $createContactsResult1['id'];
+                $addressGet['version']    =  3;
+                $addressGet['location_type_id'] = 1;
+                $result = civicrm_api( 'address','get' , $addressGet );
+                $otherParams[$profKey]['api.address.create']['master_id'] = $result['id'];
+                $shareOtherParams = $otherParams[$profKey];
+                $shareOtherParams['id'] = $pContactIds[$pID];
+                $shareOtherParams['version'] = 3;
+                $childAddress = civicrm_api( 'contact', 'create', $shareOtherParams );
+              }
+              $contactData = $$createContactsParams;
+              if ( !empty($contactsCustomParams) ) {
+                $contactData = array_merge($contactData, $contactsCustomParams );
+              }
+              if( !empty( $otherParams )) {
+                $contactData = array_merge($contactData, $otherParams[$profKey] );
+              }
+            
+              $contactsCustomParams = array();
+              $$createContactsResult = civicrm_api( 'contact', 'create', $contactData );
             }
             $child   = $pContactIds[$pID];
             $current = $createContactsResult1['id'];
