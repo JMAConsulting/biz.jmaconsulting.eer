@@ -118,9 +118,10 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
     $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
     if ( $is_enhanced ) {
       $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6 );
-      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile WHERE  area = 2 ORDER BY weight ");
+      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight ");
       while( $profiles->fetch( ) ) {
         $ids[] = $profiles->uf_group_id;
+        $addedProfiles[] = $profiles->title;
       }
       $form->_fields = array();
       $contacts = $form->getVar('_params');
@@ -239,11 +240,18 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
       //   }
       // }
       
-      $form->assign( 'customPost', $form->_fields );
-      $profilesPre = CRM_Core_DAO::singleValueQuery(" SELECT uf_group_id FROM civicrm_event_enhanced_profile WHERE area =1");
       
-      $form->buildCustom( $profilesPre , 'customPre' ); 
-      $fields = CRM_Core_BAO_UFGroup::getFields( $profilesPre, false, CRM_Core_Action::ADD,
+      $form->assign( 'customPost', $form->_fields );
+      $profilesPre = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active = 1 ");
+
+      
+       while( $profilesPre->fetch( ) ) {
+         $profilePre = $profilesPre->uf_group_id;
+         $addedProfiles[] = $profilesPre->title;
+       }
+       
+      $form->buildCustom( $profilePre , 'customPre' ); 
+      $fields = CRM_Core_BAO_UFGroup::getFields( $profilePre, false, CRM_Core_Action::ADD,
                                                  null , null, false, null,
                                                  false, null, CRM_Core_Permission::CREATE,
                                                  'field_name', true );
@@ -375,6 +383,7 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
       }
       $config =& CRM_Core_Config::singleton( );
       $config->_form = $form;
+      $config->_addedProfiles = $addedProfiles;
       $config->_is_shareAdd = $contacts[0]['is_shareAdd'];
       $config->_is_spouse   = $contacts[0]['is_spouse'];
       
@@ -389,7 +398,8 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
     if ( $is_enhanced ) {
       $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6 );
       
-      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile WHERE event_id = {$form->_eventId} AND area = 2 ORDER BY weight ");
+      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight ");
+      
       while( $profiles->fetch( ) ) {
         $ids[] = $profiles->uf_group_id;
       }
@@ -502,7 +512,7 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
       }
       
       $form->assign( 'customPost', $form->_fields );
-      $profilesPre = CRM_Core_DAO::singleValueQuery(" SELECT uf_group_id FROM civicrm_event_enhanced_profile WHERE area =1");
+      $profilesPre = CRM_Core_DAO::singleValueQuery(" SELECT uf_group_id FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active =1 ");
       
       $form->buildCustom( $profilesPre , 'customPre' );
       $fields = CRM_Core_BAO_UFGroup::getFields( $profilesPre, false, CRM_Core_Action::ADD,
@@ -584,6 +594,7 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
     require_once 'api/api.php';
     $config =& CRM_Core_Config::singleton( );
     $form   = $config->_form;
+    $addedProfiles = $config->_addedProfiles;
     $parts  = count($form->_part);
     $config->_participants[] = $objectId;
     $participants = $config->_participants;
@@ -596,6 +607,13 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
       $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$objectRef->event_id}" );
       if ( $is_enhanced ) {
         $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4);
+        
+		foreach( $profArray as $profileKey => $profileValues) {
+			if(!in_array( $profileKey, $addedProfiles )) {
+             unset($profArray[$profileKey]);
+            }
+        }
+		
         $createContactsResult2 = $createContactsResult3 = $createContactsResult4 = null;
         $relationshipTypeDAO = new CRM_Contact_BAO_RelationshipType();
         $relationshipTypeDAO->find();
@@ -695,7 +713,7 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
               if ( !empty($contactsCustomParams) ) {
                 $contactData = array_merge($contactData, $contactsCustomParams );
               }
-              if( !empty( $otherParams )) {
+              if( is_array( $otherParams ) && !empty( $otherParams )) {
                 $contactData = array_merge($contactData, $otherParams[$profKey] );
               }
             
