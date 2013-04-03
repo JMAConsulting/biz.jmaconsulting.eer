@@ -396,6 +396,13 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
     $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
     
     if ( $is_enhanced ) {
+      $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+      
+      if ( $profileCount != 5 ) {
+        $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
+        $form->addElement('hidden', 'email-51');
+        $form->setElementError('email-51',$error);
+      }
       $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6 );
       
       $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight ");
@@ -580,6 +587,12 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
   }
 
   if( $formName == 'CRM_Event_Form_ManageEvent_Registration' ) {
+    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+    if ( $profileCount != 5 ) {
+      $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
+      $form->addElement('hidden', 'email-51');
+      $form->setElementError('email-51',$error);
+    }
     $form->addElement( 'checkbox', 'is_enhanced', ts( 'Use Enhanced Registration?' ) );
     $eventID = $form->_id;
     $is_enhanced = null;
@@ -587,6 +600,18 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
     $defaults['is_enhanced'] = $is_enhanced;
     $form->setDefaults( $defaults );  
   }
+}
+
+function eer_civicrm_validate( $formName, &$fields, &$files, &$form ) {
+  $errors = array( );
+  if ( $formName == 'CRM_Event_Form_ManageEvent_Registration' && isset($fields['is_enhanced'])) {
+    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+    
+    if ( $profileCount != 5 ) {
+      $errors['is_enhanced'] = ts( 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.' );
+    }
+  }
+  return empty( $errors ) ? true : $errors;
 }
 
 function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
@@ -608,10 +633,10 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
       if ( $is_enhanced ) {
         $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4);
         
-		foreach( $profArray as $profileKey => $profileValues) {
-			if(!in_array( $profileKey, $addedProfiles )) {
-             unset($profArray[$profileKey]);
-            }
+        foreach( $profArray as $profileKey => $profileValues) {
+          if(!in_array( $profileKey, $addedProfiles )) {
+            unset($profArray[$profileKey]);
+          }
         }
 		
         $createContactsResult2 = $createContactsResult3 = $createContactsResult4 = null;
@@ -908,11 +933,11 @@ function eer_civicrm_postProcess( $formName, &$form  ) {
     if( $isenhanced ) {
       $isEnhanced = CRM_Core_DAO::singleValueQuery( "SELECT id FROM civicrm_event_enhanced WHERE event_id = $eventId" );
       if (empty($isEnhanced) ) {
-        $newIndProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'New Individual', 'id', 'title');
-        $curUserProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'Current User Profile', 'id', 'title');
-        $otherPG = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'Other Parent Or Guardian', 'id', 'title');
-        $firstEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'First Emergency Contacts', 'id', 'title');
-        $secondEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'Second Emergency Contacts', 'id', 'title');
+        $newIndProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_your_registration_info', 'id', 'name');
+        $curUserProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_current_user_profile', 'id', 'name');
+        $otherPG = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'id', 'name');
+        $firstEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_first_emergency_contacts', 'id', 'name');
+        $secondEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_second_emergency_contacts', 'id', 'name');
         CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced( id, event_id, is_enhanced ) values( null,'$eventId','$isenhanced' )" );
         CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $newIndProfile, 2, 1, null,0)" );
         CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $curUserProfile, 1, 1, null,0)" );
