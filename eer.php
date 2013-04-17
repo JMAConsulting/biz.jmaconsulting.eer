@@ -396,7 +396,7 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
     $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
     
     if ( $is_enhanced ) {
-      $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+      $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
       
       if ( $profileCount != 5 ) {
         $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
@@ -587,7 +587,7 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
   }
 
   if( $formName == 'CRM_Event_Form_ManageEvent_Registration' ) {
-    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
     if ( $profileCount != 5 ) {
       $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
       $form->addElement('hidden', 'email-51');
@@ -605,7 +605,7 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
 function eer_civicrm_validate( $formName, &$fields, &$files, &$form ) {
   $errors = array( );
   if ( $formName == 'CRM_Event_Form_ManageEvent_Registration' && isset($fields['is_enhanced'])) {
-    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_your_registration_info', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
     
     if ( $profileCount != 5 ) {
       $errors['is_enhanced'] = ts( 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.' );
@@ -933,7 +933,7 @@ function eer_civicrm_postProcess( $formName, &$form  ) {
     if( $isenhanced ) {
       $isEnhanced = CRM_Core_DAO::singleValueQuery( "SELECT id FROM civicrm_event_enhanced WHERE event_id = $eventId" );
       if (empty($isEnhanced) ) {
-        $newIndProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_your_registration_info', 'id', 'name');
+        $newIndProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'new_individual', 'id', 'name');
         $curUserProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_current_user_profile', 'id', 'name');
         $otherPG = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'id', 'name');
         $firstEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_first_emergency_contacts', 'id', 'name');
