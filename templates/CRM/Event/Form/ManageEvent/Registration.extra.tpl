@@ -19,9 +19,8 @@
 		    	cj("#is_enhanced").attr('checked',true);
 			cj("#is_multiple_registrations").attr('checked',true);
 
-		   	cj("#custom_pre_id").val(cj("#custom_pre_id").find("option:contains('Current User Profile')").val());
+		   	cj("#custom_pre_id").val(4);
 		   	cj("#additional_custom_pre_id").val(4);
-		   	cj("#additional_custom_post_id").val(cj("#custom_pre_id").find("option:contains('Your Registration Info')").val());
 			cj(".crm-event-manage-registration-form-block-custom_pre_id").hide();
 			cj("#profile_post").hide();
 			cj("#additional_profile_pre").hide();

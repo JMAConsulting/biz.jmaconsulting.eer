@@ -56,6 +56,22 @@ function eer_civicrm_install() {
  * Implementation of hook_civicrm_uninstall
  */
 function eer_civicrm_uninstall() {
+  /**
+   * Delete the biz_jmaconsulting_eer profiles at the time of uninstall extension if not used in other events or contributions.
+   */
+  $DAO = CRM_Core_DAO::executeQuery("SELECT id FROM  civicrm_uf_group WHERE name IN ('biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts')");
+  while ($DAO->fetch()) {
+    $profileIDs[$DAO->id] = $DAO->id;
+  }
+  $ufJoinDAO = CRM_Core_DAO::executeQuery("SELECT uf_group_id FROM  civicrm_uf_join WHERE uf_group_id IN (".implode(', ', $profileIDs).") AND entity_table IS NOT NULL");
+  while ($ufJoinDAO->fetch()) {
+    if (in_array($ufJoinDAO->uf_group_id, $profileIDs)) {
+      unset($profileIDs[$ufJoinDAO->uf_group_id]);
+    }
+  }
+  CRM_Core_DAO::executeQuery("DELETE FROM civicrm_uf_field WHERE uf_group_id IN (".implode(', ', $profileIDs).")");
+  CRM_Core_DAO::executeQuery("DELETE FROM civicrm_uf_join WHERE uf_group_id IN (".implode(', ', $profileIDs).")");
+  CRM_Core_DAO::executeQuery("DELETE FROM civicrm_uf_group WHERE id IN (".implode(', ', $profileIDs).")");
   return _eer_civix_civicrm_uninstall();
 }
 
@@ -96,318 +112,157 @@ function eer_civicrm_managed(&$entities) {
   return _eer_civix_civicrm_managed($entities);
 }
 
-function eer_civicrm_buildForm( $formName, &$form  )  {
-  $childName  = array( 1 => 'Second', 2 => 'Third', 3 => 'Fourth', 4 => 'Fifth', 5 => 'Sixth', 6 => 'Seventh');
- 
-  if( $formName == 'CRM_Event_Form_Registration_AdditionalParticipant' ) {
-    $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
-    if ( $is_enhanced ) {
-      foreach( $form->_fields as $fieldKey => $fieldValues ) {
+function eer_civicrm_buildForm($formName, &$form) {
+  $childName  = array(1 => 'Second', 2 => 'Third', 3 => 'Fourth', 4 => 'Fifth', 5 => 'Sixth', 6 => 'Seventh');
+  if ($formName == 'CRM_Event_Form_Registration_AdditionalParticipant') {
+    $is_enhanced = CRM_Core_DAO::singleValueQuery("SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}");
+    if ($is_enhanced) {
+      foreach ($form->_fields as $fieldKey => $fieldValues) {
         $partcipantCount = $form->getVar('_name');
         $pCount = explode('_', $partcipantCount);
         $fieldValues['groupTitle'] = $childName[$pCount[1]].' Child';
         $firstChild[$fieldKey] = $fieldValues;
       }
-      $form->assign( 'additionalCustomPre', $firstChild );
+      $form->assign('additionalCustomPre', $firstChild);
     }
   }
 
-
-  if( $formName == 'CRM_Event_Form_Registration_Confirm' || $formName == 'CRM_Event_Form_Registration_ThankYou' ) { 
-    
-    $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
-    if ( $is_enhanced ) {
-      $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6 );
-      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight ");
-      while( $profiles->fetch( ) ) {
+  if ($formName == 'CRM_Event_Form_Registration_Confirm' || $formName == 'CRM_Event_Form_Registration_ThankYou') { 
+    $is_enhanced = CRM_Core_DAO::singleValueQuery("SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}");
+    if ($is_enhanced) {
+      $profArray = array('Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => '');
+      $profiles = CRM_Core_DAO::executeQuery("SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight");
+      while($profiles->fetch()) {
         $ids[] = $profiles->uf_group_id;
         $addedProfiles[] = $profiles->title;
       }
       $form->_fields = array();
       $contacts = $form->getVar('_params');
-      foreach ( $ids as $profileKey => $profileID ) {
+      foreach ($ids as $profileKey => $profileID) {
         $id[$profileKey] = $profileID;
-        $form->buildCustom( $id , 'customPost' );
+        $form->buildCustom($id , 'customPost');
         unset($id[$profileKey]);
-        $fields = CRM_Core_BAO_UFGroup::getFields( $profileID, false, CRM_Core_Action::ADD,
-                                                   null , null, false, null,
-                                                   false, null, CRM_Core_Permission::CREATE,
-                                                   'field_name', true );
-        //$profileKey = null;
-        foreach( $fields as $key => $value ) {
+        $fields = CRM_Core_BAO_UFGroup::getFields($profileID, FALSE, CRM_Core_Action::ADD,
+                                                   NULL , NULL, FALSE, NULL,
+                                                   FALSE, NULL, CRM_Core_Permission::CREATE,
+                                                   'field_name', TRUE);
+        
+        foreach ($fields as $key => $value) {
           $profileKey = $profArray[$value['groupTitle']];
           $newKey = $key;
-          if( !empty($profileKey) ) {
-            if ( strstr( $key , 'custom' ) ) { 
+          if (!empty($profileKey)) {
+            if (strstr($key , 'custom')) { 
               $newKey = $key.'#'.$profileKey;
             } else {
               $newKey = $key.$profileKey;
             }
           }
-          $form->_fields[$newKey] = $form->_fields[$key];
-          $form->_elementIndex[$newKey] = $form->_elementIndex[$key];
-          $form->_elements[$form->_elementIndex[$key]]->_attributes['name'] = $newKey;
-          //$form->_elements[$form->_elementIndex[$key]]->_flagFrozen = null;
-          
-          if ( !empty( $form->_submitValues ) ) {
-              if( strstr($newKey, (string)$profArray['New Individual'] ) ) {
-                if( isset( $form->_submitValues[$key] ) ) {
-                  $form->_elements[$form->_elementIndex[$key]]->_attributes['value'] = $form->_submitValues[$key];
-                } else {
-                  unset($form->_elements[$form->_elementIndex[$key]]->_attributes['value']);
-                }
-              } else {
-                if( isset( $form->_submitValues[$newKey] ) ) {
-                  $form->_elements[$form->_elementIndex[$key]]->_attributes['value'] = $form->_submitValues[$newKey];
-                } else {
-                  unset($form->_elements[$form->_elementIndex[$key]]->_attributes['value']);
-                }
-              }  
+          if ($value['groupTitle'] == 'New Individual') { 
+            $value['groupTitle'] = 'First Child';
           }
-          $form->_elements[$form->_elementIndex[$key]]->_name = $newKey;
-          $fields[$key]['name'] = $newKey;
-          $form->_fields[$newKey] = $fields[$key];
-          unset( $form->_defaultValues[$key] );
-          unset( $form->_defaults[$key] );
-          unset( $form->_elementIndex[$key] );
-          unset( $form->_fields[$key] );
-          unset( $form->_rules[$key] );
-        }
-      }
-      $allCount = $individualCount = 0; $head = null;
-      foreach( $form->_fields as $fieldKey => $fieldValue ) {
-        $allCount++;
-        if( $form->_fields[$fieldKey]['groupTitle'] == 'New Individual' ) {
-          if( !isset( $head ) ) {
-            $head = $allCount - 1;
-          }
-          $individualCount++;
-          if( strstr( $fieldKey , 'custom' ) ) {
-            $newKey = rtrim( $fieldKey, '#'.$profArray['New Individual'] );
-          } else {
-            $newKey = rtrim( $fieldKey, $profArray['New Individual'] );
-          }
-          $form->_fields[$fieldKey]['groupTitle'] = 'First Child';
-          $form->_fields[$fieldKey]['name'] = $newKey;
-          $form->_elementIndex[$newKey] = $form->_elementIndex[$fieldKey];
-          $individual[$newKey] = $form->_fields[$fieldKey];
-          $form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['name'] = $newKey;
-          $form->_elements[$form->_elementIndex[$fieldKey]]->_name = $newKey;
-          unset($form->_fields[$fieldKey]);
-          unset($form->_elementIndex[$fieldKey]);
-        } 
-      }
-      
-      if($individual) {
-        $pre = array_slice( $form->_fields, 0, $head);
-        $tail = array_slice( $form->_fields, $head , $allCount - $individualCount  );
-        $form->_fields = array_merge( $pre, $individual, $tail );
-      }
-      
-      foreach( $form->_fields as $newKey => $feildValue ) {
-        if ( !empty( $contacts[0][$newKey] ) ) {
-          $form->_elements[$form->_elementIndex[$newKey]]->_attributes['value'] = $contacts[0][$newKey];
-          $form->_elements[$form->_elementIndex[$newKey]]->_values = array( $contacts[0][$newKey] );
-          if ( array_key_exists('multiple', $form->_elements[$form->_elementIndex[$newKey]]->_attributes) ) {
-            $form->_elements[$form->_elementIndex[$newKey]]->_values = $contacts[0][$newKey];
-          } else {
-            $form->_elements[$form->_elementIndex[$newKey]]->_values = array( $contacts[0][$newKey] );
-          }
-          if ( array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$newKey]]) ) {
-            foreach ($form->_elements[$form->_elementIndex[$newKey]]->_elements as $readioKey => $radioVal ) {
-              if ($radioVal->_type == 'radio' ) {
-                if ( $contacts[0][$newKey] == $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['value']  ) {
-                  $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
-                } else {
-                  $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = '';
-                }
-
-              }
-              if ($radioVal->_type == 'checkbox' ) { 
-                if ( $contacts[0][$newKey][$form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['id']]  == 1 ) {
-                  $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
-                } else {
-                  $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = '';
-                }
-              } 
-            }
+          $postGroupTitle[$profileID]['groupTitle'] = $value['groupTitle'];
+          if (array_key_exists($newKey, $contacts[0])) {
+            $customFields[$newKey] = $contacts[0][$newKey];
+            // FIXME for multi choice custom fields (eg. select, radio, checkbox, multi select)
+            $customPost[$profileID][$value['title']] = $contacts[0][$newKey];
           }
         }
       }
-      // foreach($myFields as $myKey => $myVal ) {
-      //   if( strstr( $myKey, 'billing') || strstr( $myKey, 'credit') || strstr( $myKey, 'cvv') ) {
-      //     unset($myFields[$myKey]);
-      //   }
-      // }
-      
-      
-      $form->assign( 'customPost', $form->_fields );
-      $profilesPre = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active = 1 ");
+    
+      $custom['CustomPostGroupTitle'] = $postGroupTitle;
+      $custom['CustomPost'] = $customPost;
+      $profilesPre = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, title, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active = 1");
 
-      
-       while( $profilesPre->fetch( ) ) {
+       while ($profilesPre->fetch()) {
          $profilePre = $profilesPre->uf_group_id;
          $addedProfiles[] = $profilesPre->title;
        }
-       
-      $form->buildCustom( $profilePre , 'customPre' ); 
-      $fields = CRM_Core_BAO_UFGroup::getFields( $profilePre, false, CRM_Core_Action::ADD,
-                                                 null , null, false, null,
-                                                 false, null, CRM_Core_Permission::CREATE,
-                                                 'field_name', true );
-      foreach( $fields as $fieldKey => $fieldValues ) {
+        
+      $form->buildCustom($profilePre , 'customPre');
+      
+      $fields = CRM_Core_BAO_UFGroup::getFields($profilePre, FALSE, CRM_Core_Action::ADD,
+                                                NULL , NULL, FALSE, NULL,
+                                                FALSE, NULL, CRM_Core_Permission::CREATE,
+                                                'field_name', TRUE);
+      foreach ($fields as $fieldKey => $fieldValues) {
         $newKey = $fieldKey;
-        if( $fields[$fieldKey]['groupTitle'] == 'New Individual' ) {
-          $fields[$fieldKey]['groupTitle'] = 'First Child';
+        if ($fields[$fieldKey]['groupTitle'] == 'New Individual') {
+          $fields[$fieldKey]['groupTitle'] = $preGroupTitle = 'First Child';
         } else {
-          if ( strstr( $fieldKey , 'custom' ) ) { 
+          $preGroupTitle = $fields[$fieldKey]['groupTitle'];
+          if (strstr($fieldKey , 'custom')) { 
             $newKey = $fieldKey.'#'.$profArray[$fieldValues['groupTitle']];
           } else {
             $newKey = $fieldKey.$profArray[$fieldValues['groupTitle']];
           }
         }
-
-        $form->_fields[$newKey] = $form->_fields[$fieldKey];
-        $form->_elementIndex[$newKey] = $form->_elementIndex[$fieldKey];
-        $form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['name'] = $newKey;
-        if ( !empty( $form->_submitValues ) ) { 
-          if( $formName == 'CRM_Event_Form_Registration_Confirm') {
-            //if( isset( $form->_submitValues[$newKey] ) ) {
-              $form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['value'] = $form->_submitValues[$newKey];
-            } else {
-              unset($form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['value']);
-            }
-            //}
-        }
+        $customPre[$fieldValues['title']] = $contacts[0][$newKey];
+        $customFields[$newKey] = $contacts[0][$newKey];
         $form->_elements[$form->_elementIndex[$fieldKey]]->_name = $newKey;
         $fields[$fieldKey]['name'] = $newKey;
-        $form->_elements[$form->_elementIndex[$newKey]]->_attributes['value'] = $contacts[0][$newKey];
-        if ( array_key_exists('multiple', $form->_elements[$form->_elementIndex[$newKey]]->_attributes) ) {
-          $form->_elements[$form->_elementIndex[$newKey]]->_values = $contacts[0][$newKey];
-        } else {
-          $form->_elements[$form->_elementIndex[$newKey]]->_values = array( $contacts[0][$newKey] );
-        }
-        if ( array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$newKey]]) ) {
-          foreach ($form->_elements[$form->_elementIndex[$newKey]]->_elements as $readioKey => $radioVal ) {
-            if ($radioVal->_type == 'radio' ) {
-              if ( $contacts[0][$newKey] == $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['value']  ) {
-                $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
-              } else {
-                $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = '';
-              }
-            }
-            
-            if ($radioVal->_type == 'checkbox' ) {  
-              if ( $contacts[0][$newKey][$form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['id']]  == 1 ) {
-                $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
-              } else {
-                $form->_elements[$form->_elementIndex[$newKey]]->_elements[$readioKey]->_attributes['checked'] = '';
-              }
-            } 
-          }
-          if ( $form->_elements[$form->_elementIndex[$newKey]]->_type == 'file' ) {
-            unset($form->_elements[$form->_elementIndex[$newKey]]);
-            unset($firstChild[$newKey]);
-          }
-        }
-        $firstChild[$newKey] = $fields[$fieldKey];
       } 
-     
-      $form->assign( 'customPre', $firstChild );
-      
-      foreach ( $contacts as $contactKey => $contactValue ) {
-        if ( $contactKey != 0 ) {
-          foreach( $contactValue as $contKey => $contVal ) {
-            if( array_key_exists( $contKey, $form->_elementIndex ) ) {
-              if ( array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$contKey]]) ) {
-                foreach ( $form->_elements[$form->_elementIndex[$contKey]]->_elements as $addKey  => $addVal ) {
-                  if ($addVal->_type == 'radio' ) {
-                    if ( $addVal->_attributes['value'] == $contVal ) {
-                      $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $addVal->_text;
-                    }
-                  }
-                  if ( $addVal->_type == 'checkbox' ) {
-                    $checkBoxFields[$addVal->_attributes['id']] = $addVal->_text;
-                  }
-                }
-                $check =  null;
-                if ( !empty ( $checkBoxFields ) ) {
-                  foreach ( $contVal as $checkKey => $checkVal ) {
-                    if (!empty($checkVal))  {
-                      $check = $check.', '.$checkBoxFields[$checkKey];
-                    }
-                  }
-                  $check = ltrim($check, ', ');
-                  $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $check;
-                  $checkBoxFields =  Array( );
-                }
+      // assign primaryParticipantProfile to display on Confirm and Thank you page
+      $custom['CustomPreGroupTitle'] = $preGroupTitle;
+      $custom['CustomPre'] = $customPre;
+      $form->assign('primaryParticipantProfile', $custom);
+      foreach ($contacts as $contactKey => $contactValue) {
+        if ($contactKey != 0) {
+          $addParticipant = $contactKey+1;
+          foreach ($contactValue as $contKey => $contVal) {
+            if (array_key_exists($contKey, $form->_elementIndex)) {
+              if (array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$contKey]])) {
+
+                //FIXME for additional profile custom values 
+
               } else {
-                foreach ( $form->_elements[$form->_elementIndex[$contKey]] as $addKey  => $addVal ) {
-                  if ( $form->_elements[$form->_elementIndex[$contKey]]->_type == 'select' ) {
-                    if ( array_key_exists('multiple', $form->_elements[$form->_elementIndex[$contKey]]->_attributes) ) { 
-                      foreach( $form->_elements[$form->_elementIndex[$contKey]]->_options as $optionVal ) {
-                        $multipleFields[$optionVal['attr']['value']] = $optionVal['text'];
-                      }
-                    } else {
-                      // if(is_array($contVal)) {
-                      //   $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $form->_elements[$form->_elementIndex[$contKey]]->_options[$contVal]['text'];
-                      // } else {
-                      foreach( $form->_elements[$form->_elementIndex[$contKey]]->_options as $optionVal ) {
-                        $selectFields[$optionVal['attr']['value']] = $optionVal['text'];
-                      }
-                      $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $selectFields[$contVal];
+                foreach ($form->_elements[$form->_elementIndex[$contKey]] as $addKey  => $addVal) {
+                  if ($form->_elements[$form->_elementIndex[$contKey]]->_type != 'hidden') {
+                    if (!empty($contVal) && !empty($form->_elements[$form->_elementIndex[$contKey]]->_label)) {
+                      $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $contVal;
                     }
-                  } elseif( $form->_elements[$form->_elementIndex[$contKey]]->_type != 'hidden' ) {
-                    if ( !empty($contVal) && !empty( $form->_elements[$form->_elementIndex[$contKey]]->_label ) ) {
-                      $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $contVal;
-                    }
-                  } 
-                  $check = null;
-                  if ( !empty ( $multipleFields ) ) {
-                    foreach ( $contVal as $checkKey => $checkVal ) {
-                      $check = $check.', '.$multipleFields[$checkVal];
-                    } 
-                    $check = ltrim($check, ', ');
-                    $additionalParticipants[$contactKey]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label]= $check;
-                    $multipleFields = Array();
                   }
                 }
               }
             }
-            $additionalParticipants[$contactKey]['additionalCustomPreGroupTitle'] = $childName[$contactKey].' Child';
+            $additionalParticipants[$addParticipant]['additionalCustomPreGroupTitle'] = $childName[$contactKey].' Child';
           } 
         }
       }
-      if ( !empty($additionalParticipants) ) {
-        $form->assign( 'addParticipantProfile', $additionalParticipants );
+      if (!empty($additionalParticipants)) {
+        $form->assign('addParticipantProfile', $additionalParticipants);
       }
-      $config =& CRM_Core_Config::singleton( );
+      
+      $contacts = $form->getVar('_params');
+      foreach ($customFields as $fieldsKey => $fieldsValue) {
+        if(array_key_exists($fieldsKey, $contacts[0])) {
+          $form->_submitValues[$fieldsKey] = $contacts[0][$fieldsKey];
+        }
+      }
+      $config = CRM_Core_Smarty::singleton();
       $config->_form = $form;
       $config->_addedProfiles = $addedProfiles;
       $config->_is_shareAdd = $contacts[0]['is_shareAdd'];
       $config->_is_spouse   = $contacts[0]['is_spouse'];
-      
     } 
-    // if( $formName == 'CRM_Event_Form_Registration_Confirm' || $formName == 'CRM_Event_Form_Registration_ThankYou' ) {
   }
 
   
-  if( $formName == 'CRM_Event_Form_Registration_Register' ) {
-    $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
+  if ($formName == 'CRM_Event_Form_Registration_Register') {
+    $is_enhanced = CRM_Core_DAO::singleValueQuery("SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}");
     
-    if ( $is_enhanced ) {
-      $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+    if ($is_enhanced) {
+      $profileCount = CRM_Core_DAO::singleValueQuery("SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1");
       
-      if ( $profileCount != 5 ) {
+      if ($profileCount != 5) {
         $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
         $form->addElement('hidden', 'email-51');
         $form->setElementError('email-51',$error);
       }
-      $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6 );
+      $profArray = array('Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4, 'New Individual' => 6);
       
-      $profiles = CRM_Core_DAO::executeQuery(" SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight ");
+      $profiles = CRM_Core_DAO::executeQuery("SELECT uf_group_id, weight FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 2  AND civicrm_uf_group.is_active =1 ORDER BY civicrm_event_enhanced_profile.weight");
       
-      while( $profiles->fetch( ) ) {
+      while ($profiles->fetch()) {
         $ids[] = $profiles->uf_group_id;
       }
       $form->_fields = array();
@@ -416,21 +271,21 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
       $form->addRadio('is_shareAdd',ts( 'Shares My Address' ),$option, NULL,  NULL, FALSE);
       $form->assign('addshareNspouse' , $is_enhanced );
       $contacts = $form->_submitValues;
-      foreach ( $ids as $profileKey => $profileID ) {
+      foreach ($ids as $profileKey => $profileID) {
         $id[$profileKey] = $profileID;
-        $form->buildCustom( $id , 'customPost' );
+        $form->buildCustom($id , 'customPost');
         unset($id[$profileKey]);
-        $fields = CRM_Core_BAO_UFGroup::getFields( $profileID, false, CRM_Core_Action::ADD,
-                                                   null , null, false, null,
-                                                   false, null, CRM_Core_Permission::CREATE,
-                                                   'field_name', true );
-        //$profileKey = null;
-        foreach( $fields as $key => $value ) {
+        $fields = CRM_Core_BAO_UFGroup::getFields($profileID, FALSE, CRM_Core_Action::ADD,
+                                                  NULL, NULL, FALSE, NULL,
+                                                  FALSE, NULL, CRM_Core_Permission::CREATE,
+                                                  'field_name', TRUE);
+        
+        foreach ($fields as $key => $value) {
           $profileKey = $profArray[$value['groupTitle']];
           
           $newKey = $key;
-          if( !empty($profileKey) ) {
-            if ( strstr( $key , 'custom' ) ){ 
+          if (!empty($profileKey)) {
+            if (strstr($key , 'custom')){ 
               $newKey = $key.'#'.$profileKey;
             } else {
               $newKey = $key.$profileKey;
@@ -439,39 +294,38 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
           $form->_fields[$newKey] = $form->_fields[$key];
           $form->_elementIndex[$newKey] = $form->_elementIndex[$key];
           $form->_elements[$form->_elementIndex[$key]]->_attributes['name'] = $newKey;
-          $form->_elements[$form->_elementIndex[$key]]->_flagFrozen = null;
-          if ( !empty( $form->_submitValues ) ) {
-            if( strstr($newKey, (string)$profArray['New Individual'] ) ) {
+          $form->_elements[$form->_elementIndex[$key]]->_flagFrozen = NULL;
+          if (!empty($form->_submitValues)) {
+            if (strstr($newKey, (string)$profArray['New Individual'])) {
               $form->_elements[$form->_elementIndex[$key]]->_attributes['value'] = $form->_submitValues[$key];
             } else {
               $form->_elements[$form->_elementIndex[$key]]->_attributes['value'] = $form->_submitValues[$newKey];
             }
           }
           $form->_elements[$form->_elementIndex[$key]]->_name = $newKey;
-          //$form->_rules[$newKey] = $form->_rules[$key];
           
           $fields[$key]['name'] = $newKey;
           $form->_fields[$newKey] = $fields[$key];
-          unset( $form->_defaultValues[$key] );
-          unset( $form->_defaults[$key] );
-          unset( $form->_elementIndex[$key] );
-          unset( $form->_fields[$key] );
-          unset( $form->_rules[$key] );
+          unset($form->_defaultValues[$key]);
+          unset($form->_defaults[$key]);
+          unset($form->_elementIndex[$key]);
+          unset($form->_fields[$key]);
+          unset($form->_rules[$key]);
         }
       }
-      $allCount = $individualCount = 0; $head = null;
-      foreach( $form->_fields as $fieldKey => $fieldValue ) {
+      $allCount = $individualCount = 0; $head = NULL;
+      foreach ($form->_fields as $fieldKey => $fieldValue) {
         $allCount++;
-        if( $form->_fields[$fieldKey]['groupTitle'] == 'New Individual' ) {
-          if( !isset( $head ) ) {
+        if ($form->_fields[$fieldKey]['groupTitle'] == 'New Individual') {
+          if (!isset($head)) {
             $head = $allCount - 1;
           }
           $individualCount++;
-          if( strstr( $fieldKey , 'custom' ) ) {
-            $newKey = rtrim( $fieldKey, $profArray['New Individual'] );
-            $newKey = rtrim( $newKey, '#' );
+          if (strstr($fieldKey , 'custom')) {
+            $newKey = rtrim($fieldKey, $profArray['New Individual']);
+            $newKey = rtrim($newKey, '#');
           } else {
-            $newKey = rtrim( $fieldKey, $profArray['New Individual'] );
+            $newKey = rtrim($fieldKey, $profArray['New Individual']);
           }
           $form->_fields[$fieldKey]['groupTitle'] = 'First Child';
           $form->_fields[$fieldKey]['name'] = $newKey;
@@ -484,31 +338,31 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
         } 
       }
       
-      if($individual) {
-        $pre = array_slice( $form->_fields, 0, $head);
-        $tail = array_slice( $form->_fields, $head , $allCount - $individualCount  );
-        $form->_fields = array_merge( $pre, $individual, $tail );
+      if ($individual) {
+        $pre = array_slice($form->_fields, 0, $head);
+        $tail = array_slice($form->_fields, $head , $allCount - $individualCount);
+        $form->_fields = array_merge($pre, $individual, $tail);
       }
           
-      if ( !empty( $contacts )) {
-        foreach ($form->_fields as $field => $value ) {
-          if ( array_key_exists('multiple', $form->_elements[$form->_elementIndex[$field]]->_attributes) ) {
+      if (!empty($contacts)) {
+        foreach ($form->_fields as $field => $value) {
+          if (array_key_exists('multiple', $form->_elements[$form->_elementIndex[$field]]->_attributes)) {
             $form->_elements[$form->_elementIndex[$field]]->_values = $contacts[$field];
             $form->_elements[$form->_elementIndex[$field]]->_attributes['value'] = implode( ',', $contacts[$field] );
-          } elseif ( array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$field]]) ) {
-            foreach ($form->_elements[$form->_elementIndex[$field]]->_elements as $readioKey => $radioVal ) {
-              if ($radioVal->_type == 'radio' ) {
-                if ( $contacts[$field] == $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['value']  ) {
+          } elseif (array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$field]])) {
+            foreach ($form->_elements[$form->_elementIndex[$field]]->_elements as $readioKey => $radioVal) {
+              if ($radioVal->_type == 'radio') {
+                if ($contacts[$field] == $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['value']) {
                   $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
                 } else {
-                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);// = '';
+                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);
                 }
               }
-              if ($radioVal->_type == 'checkbox' ) {  
-                if ( $contacts[$field][$form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['id']]  == 1 ) {
+              if ($radioVal->_type == 'checkbox') {  
+                if ($contacts[$field][$form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['id']]  == 1) {
                   $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
                 } else {
-                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);// = '';
+                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);
                 }
               } 
             }
@@ -518,21 +372,21 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
         }
       }
       
-      $form->assign( 'customPost', $form->_fields );
-      $profilesPre = CRM_Core_DAO::singleValueQuery(" SELECT uf_group_id FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active =1 ");
+      $form->assign('customPost', $form->_fields);
+      $profilesPre = CRM_Core_DAO::singleValueQuery("SELECT uf_group_id FROM civicrm_event_enhanced_profile LEFT JOIN civicrm_uf_group ON civicrm_event_enhanced_profile.uf_group_id = civicrm_uf_group.id WHERE civicrm_event_enhanced_profile.event_id = {$form->_eventId} AND civicrm_event_enhanced_profile.area = 1  AND civicrm_uf_group.is_active =1");
       
-      $form->buildCustom( $profilesPre , 'customPre' );
-      $fields = CRM_Core_BAO_UFGroup::getFields( $profilesPre, false, CRM_Core_Action::ADD,
-                                                 null , null, false, null,
-                                                 false, null, CRM_Core_Permission::CREATE,
-                                                 'field_name', true );
+      $form->buildCustom($profilesPre , 'customPre');
+      $fields = CRM_Core_BAO_UFGroup::getFields($profilesPre, FALSE, CRM_Core_Action::ADD,
+                                                NULL , NULL, FALSE, NULL,
+                                                FALSE, NULL, CRM_Core_Permission::CREATE,
+                                                'field_name', TRUE);
       
-      foreach( $fields as $fieldKey => $fieldValues ) {
+      foreach ($fields as $fieldKey => $fieldValues) {
         $newKey = $fieldKey;
-        if( $fields[$fieldKey]['groupTitle'] == 'New Individual' ) {
+        if ($fields[$fieldKey]['groupTitle'] == 'New Individual') {
           $fields[$fieldKey]['groupTitle'] = 'First Child';
         } else {
-          if ( strstr( $fieldKey , 'custom' ) ) { 
+          if (strstr($fieldKey , 'custom')) { 
             $newKey = $fieldKey.'#'.$profArray[$fieldValues['groupTitle']];
           } else {
             $newKey = $fieldKey.$profArray[$fieldValues['groupTitle']];
@@ -543,37 +397,35 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
         $form->_elementIndex[$newKey] = $form->_elementIndex[$fieldKey];
         $form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['name'] = $newKey;
         $form->_elements[$form->_elementIndex[$fieldKey]]->_flagFrozen = null;
-        if ( !empty( $form->_submitValues ) ) {
+        if (!empty($form->_submitValues)) {
           $form->_elements[$form->_elementIndex[$fieldKey]]->_attributes['value'] = $form->_submitValues[$newKey];
         }
         $form->_elements[$form->_elementIndex[$fieldKey]]->_name = $newKey;
         $fields[$fieldKey]['name'] = $newKey;
-        
         $firstChild[$newKey] = $fields[$fieldKey];
       }
 
           
-      if ( !empty( $contacts )) {
-        foreach ($firstChild as $field => $value ) { 
-          if ( array_key_exists('multiple', $form->_elements[$form->_elementIndex[$field]]->_attributes) ) {
+      if (!empty($contacts)) {
+        foreach ($firstChild as $field => $value) { 
+          if (array_key_exists('multiple', $form->_elements[$form->_elementIndex[$field]]->_attributes)) {
             $form->_elements[$form->_elementIndex[$field]]->_values = $contacts[$field];
             $form->_elements[$form->_elementIndex[$field]]->_attributes['value'] = implode( ',', $contacts[$field] );
-          } elseif ( array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$field]]) ) {
-            foreach ($form->_elements[$form->_elementIndex[$field]]->_elements as $readioKey => $radioVal ) {
-              if ($radioVal->_type == 'radio' ) {
-                if ( $contacts[$field] == $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['value']  ) {
+          } elseif (array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$field]])) {
+            foreach ($form->_elements[$form->_elementIndex[$field]]->_elements as $readioKey => $radioVal) {
+              if ($radioVal->_type == 'radio') {
+                if ($contacts[$field] == $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['value']) {
                   $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
                 } else {
-                  //$form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked'] = '';
                   unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);
                 }  
               }
             
-              if ($radioVal->_type == 'checkbox' ) {  
-                if ( $contacts[$field][$form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['id']]  == 1 ) {
+              if ($radioVal->_type == 'checkbox') {  
+                if ($contacts[$field][$form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['id']]  == 1) {
                   $form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked'] = 'checked';
                 } else {
-                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);// = '';
+                  unset($form->_elements[$form->_elementIndex[$field]]->_elements[$readioKey]->_attributes['checked']);
                 }
               } 
             }
@@ -582,42 +434,51 @@ function eer_civicrm_buildForm( $formName, &$form  )  {
           }
         }
       }
-      $form->assign( 'customPre', $firstChild );
+      $form->assign('customPre', $firstChild);
     }
   }
 
-  if( $formName == 'CRM_Event_Form_ManageEvent_Registration' ) {
-    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
-    if ( $profileCount != 5 ) {
+  if ($formName == 'CRM_Event_Form_ManageEvent_Registration') {
+    $profileCount = CRM_Core_DAO::singleValueQuery("SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1");
+    if ($profileCount != 5) {
       $error = 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.';
       $form->addElement('hidden', 'email-51');
       $form->setElementError('email-51',$error);
     }
     $form->addElement( 'checkbox', 'is_enhanced', ts( 'Use Enhanced Registration?' ) );
     $eventID = $form->_id;
-    $is_enhanced = null;
+    $is_enhanced = NULL;
     $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = $eventID" );
     $defaults['is_enhanced'] = $is_enhanced;
-    $form->setDefaults( $defaults );  
+    $form->setDefaults($defaults);  
   }
 }
 
-function eer_civicrm_validate( $formName, &$fields, &$files, &$form ) {
+function eer_civicrm_validate($formName, &$fields, &$files, &$form) {
   $errors = array( );
-  if ( $formName == 'CRM_Event_Form_ManageEvent_Registration' && isset($fields['is_enhanced'])) {
-    $profileCount = CRM_Core_DAO::singleValueQuery( " SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1" );
+  if ($formName == 'CRM_Event_Form_ManageEvent_Registration' && isset($fields['is_enhanced'])) {
+    $profileCount = CRM_Core_DAO::singleValueQuery("SELECT count(id) FROM  civicrm_uf_group WHERE name IN ('new_individual', 'biz_jmaconsulting_eer_current_user_profile', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'biz_jmaconsulting_eer_first_emergency_contacts', 'biz_jmaconsulting_eer_second_emergency_contacts') AND is_active = 1");
     
-    if ( $profileCount != 5 ) {
-      $errors['is_enhanced'] = ts( 'The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.' );
+    if ($profileCount != 5) {
+      $errors['is_enhanced'] = ts('The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.');
     }
   }
-  return empty( $errors ) ? true : $errors;
+  return empty($errors) ? TRUE : $errors;
 }
 
-function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
-  if ( $objectName == 'Participant' && $op == 'create' ) {
+function eer_civicrm_pre($op, $objectName, $id, &$params) {
+  if ($objectName == 'Individual' && $op == 'edit') {
+    // unset contact id to create new conatct for child 
+    if($params['contact_id'] == $_SESSION['CiviCRM']['userID'] && !$params['flag']) {
+      unset($params['contact_id']);
+    }
+  }
+}
+
+function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+  if ($objectName == 'Participant' && $op == 'create') {
     require_once 'api/api.php';
-    $config =& CRM_Core_Config::singleton( );
+    $config =& CRM_Core_Smarty::singleton( );
     $form   = $config->_form;
     $addedProfiles = $config->_addedProfiles;
     $parts  = count($form->_part);
@@ -628,94 +489,104 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
     $pCount      = count($participants);
     $is_shareAdd = $config->_is_shareAdd;
     $is_spouse   = $config->_is_spouse;
-    if ( $parts == $pCount ) {
-      $is_enhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$objectRef->event_id}" );
-      if ( $is_enhanced ) {
-        $profArray = array( 'Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4);
+    if ($parts == $pCount) {
+      $is_enhanced = CRM_Core_DAO::singleValueQuery("SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$objectRef->event_id}");
+      if ($is_enhanced) {
+        $profArray = array('Current User Profile' => 1, 'Other Parent Or Guardian' => 2, 'First Emergency Contacts' => 3, 'Second Emergency Contacts' => 4);
         
-        foreach( $profArray as $profileKey => $profileValues) {
-          if(!in_array( $profileKey, $addedProfiles )) {
+        // skip contact creation if profile does not present
+        foreach ($profArray as $profileKey => $profileValues) {
+          if (!in_array( $profileKey, $addedProfiles)) {
             unset($profArray[$profileKey]);
           }
         }
-		
-        $createContactsResult2 = $createContactsResult3 = $createContactsResult4 = null;
+        
+        $createContactsResult2 = $createContactsResult3 = $createContactsResult4 = NULL;
         $relationshipTypeDAO = new CRM_Contact_BAO_RelationshipType();
         $relationshipTypeDAO->find();
-        while( $relationshipTypeDAO->fetch( ) ) {
+        while ($relationshipTypeDAO->fetch()) {
           $relationshipTypes[$relationshipTypeDAO->name_a_b] = $relationshipTypeDAO->id;
         }
         $participantIds = $participants;
-        foreach( $participantIds as $partKey => $partID ) {
+        foreach ($participantIds as $partKey => $partID) {
           $contactA = $pContactIds[$partID];
           unset($participantIds[$partKey]);
-          foreach( $participantIds as $partKey => $partID ) {
+          foreach ($participantIds as $partKey => $partID) {
             $contactB = $pContactIds[$partID];
             $siblingParams = array( 
-                                   'contact_id_a'         => $contactA,
-                                   'contact_id_b'         => $contactB,
-                                   'relationship_type_id' => $relationshipTypes['Sibling of'],
-                                   'is_active'            => 1,
-                                   'version'              => 3,
-                                    );
-            $siblingResult = civicrm_api( 'relationship', 'create', $siblingParams );
+                              'contact_id_a' => $contactA,
+                              'contact_id_b' => $contactB,
+                              'relationship_type_id' => $relationshipTypes['Sibling of'],
+                              'is_active' => 1,
+                              'version' => 3);
+            $siblingResult = civicrm_api('relationship', 'create', $siblingParams);
           }
         }
     
         $participantIds = $participants;
-        foreach( $participantIds as $key => $pID ) {
-          if ( $key == 0 ) {
+        foreach ($participantIds as $key => $pID) {
+          if ($key == 0) {
             $otherParams = array();
             
-            foreach( $profArray as $profKey ) {
+            foreach ($profArray as $profKey) {
               $checkDupResult = $addressResult = array();
-              if ( !empty($form->_submitValues['first_name'.$profKey]) && !empty($form->_submitValues['last_name'.$profKey]) && !empty($form->_submitValues['email-Primary'.$profKey]) ) {
+              if (!empty($form->_submitValues['first_name'.$profKey]) && !empty($form->_submitValues['last_name'.$profKey]) && !empty($form->_submitValues['email-Primary'.$profKey])) {
                 $createContactsParams = 'createContactsParams'.$profKey;
                 $createContactsResult = 'createContactsResult'.$profKey;
                 $contactsCustomParams = $otherParams = array();
                 $checkData = array(
-                                   'first_name'   => $form->_submitValues['first_name'.$profKey] ,
-                                   'last_name'    => $form->_submitValues['last_name'.$profKey],
-                                   'contact_type' => 'Individual',
-                                   'email'        => $form->_submitValues['email-Primary'.$profKey],
-                                   'version'      => 3
-                                   );
-                $checkDupResult = civicrm_api( 'contact', 'get', $checkData );
-                if( !empty($checkDupResult['values'] ) ) {
+                               'first_name' => $form->_submitValues['first_name'.$profKey] ,
+                               'last_name' => $form->_submitValues['last_name'.$profKey],
+                               'contact_type' => 'Individual',
+                               'email' => $form->_submitValues['email-Primary'.$profKey],
+                               'version' => 3);
+                $checkData['contact_id'] = NULL;
+                if ($profKey == 1) {
+                  $checkData['contact_id'] = $_SESSION['CiviCRM']['userID'];
+                  $emailPrams['version'] = 3;
+                  $emailPrams['contact_id'] = $_SESSION['CiviCRM']['userID'];
+                  $emailPrams['is_primary'] = 1;
+                  $emailResult = civicrm_api('email', 'get', $emailPrams);
+                  if (!empty($emailResult['values'])) {
+                    $emailPrams['id'] = $emailResult['id'];
+                  }
+                  $emailPrams['email'] = $form->_submitValues['email-Primary'.$profKey];
+                  $emailCreateResult = civicrm_api('email', 'create', $emailPrams);
+                  $checkData['flag'] = TRUE;
+                }
+                $checkDupResult = civicrm_api('contact', 'get', $checkData);
+                if (!empty($checkDupResult['values'])) {
                   $checkData['id'] = $checkDupResult['id'];
                   $addressParams['contact_id'] = $checkDupResult['id'];
                   $addressParams['version']    = 3;
                   $addressParams['location_type_id'] = 1;
                   $addressResult = civicrm_api( 'address', 'get', $addressParams );
-                  if( !empty($addressResult['values'] ) ) {
+                  if (!empty($addressResult['values'])) {
                     $otherParams[$profKey]['api.address.create']['id'] = $addressResult['id'];
                   }
                 }
               }
               $$createContactsParams = $checkData;
             
-              foreach( $form->_submitValues as $contactsKeys => $contactsValues ) {
+              foreach ($form->_submitValues as $contactsKeys => $contactsValues) {
                 $search = '#'.$profKey;
-                if ( strstr( $contactsKeys, $search) ) {
+                if (strstr($contactsKeys, $search)) {
                   $keyResult = explode('#', $contactsKeys);
                   $newKey = $keyResult[0];
                   $contactsCustomParams[$newKey] = $contactsValues;
                 } else {
-                  if ( ! strstr($contactsKeys, 'custom') && ! strstr($contactsKeys, 'first_name') && ! strstr($contactsKeys, 'last_name') && ! strstr($contactsKeys, 'email')) {
+                  if (! strstr($contactsKeys, 'custom') && ! strstr($contactsKeys, 'first_name') && ! strstr($contactsKeys, 'last_name') && ! strstr($contactsKeys, 'email')) {
                     $keyResult = explode('-', $contactsKeys);
                     $newKey = $keyResult[0];
-                    if ( $profKey == 1 ) {
+                    if ($profKey == 1) {
                       $otherParams[$profKey]['api.address.create'][$newKey] = $form->_submitValues[$contactsKeys];
-                      if ( strstr( $contactsKeys, 'state_province') ) {
+                      if (strstr($contactsKeys, 'state_province')) {
                         $otherParams[$profKey]['api.address.create']['state_province_id'] = $form->_submitValues[$contactsKeys];
                       }
-                      // $otherParams[$i]['api.address.create']['city']           = $form->_submitValues['city-Primary1'];
-                      // $otherParams[$i]['api.address.create']['state_province'] = $form->_submitValues['state_province-Primary1'];
-                      // $otherParams[$i]['api.address.create']['postal_code']    = $form->_submitValues['postal_code-Primary1'];
                       $otherParams[$profKey]['api.address.create']['location_type_id'] = 1;
-                    } elseif ( strstr( $contactsKeys, (string)$profKey )) {
+                    } elseif (strstr($contactsKeys, (string)$profKey)) {
                       $otherParams[$profKey]['api.address.create'][$newKey] = $contactsValues; 
-                      if ( strstr( $contactsKeys, 'state_province') ) {
+                      if (strstr($contactsKeys, 'state_province')) {
                         $otherParams[$profKey]['api.address.create']['state_province_id'] = $form->_submitValues[$contactsKeys];
                       }
                       $otherParams[$profKey]['api.address.create']['location_type_id'] = 1;
@@ -723,171 +594,161 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
                   }
                 }
               }
-              if ( $profKey == $profArray['Other Parent Or Guardian'] && $is_shareAdd ) {
+              if ($profKey == $profArray['Other Parent Or Guardian'] && $is_shareAdd) {
                 $addressGet['contact_id'] =  $createContactsResult1['id'];
                 $addressGet['version']    =  3;
                 $addressGet['location_type_id'] = 1;
-                $result = civicrm_api( 'address','get' , $addressGet );
+                $result = civicrm_api('address','get' , $addressGet);
                 $otherParams[$profKey]['api.address.create']['master_id'] = $result['id'];
                 $shareOtherParams = $otherParams[$profKey];
                 $shareOtherParams['id'] = $pContactIds[$pID];
                 $shareOtherParams['version'] = 3;
-                $childAddress = civicrm_api( 'contact', 'create', $shareOtherParams );
+                $childAddress = civicrm_api('contact', 'create', $shareOtherParams);
               }
               $contactData = $$createContactsParams;
-              if ( !empty($contactsCustomParams) ) {
+              if (!empty($contactsCustomParams)) {
                 $contactData = array_merge($contactData, $contactsCustomParams );
               }
-              if( is_array( $otherParams ) && !empty( $otherParams )) {
-                $contactData = array_merge($contactData, $otherParams[$profKey] );
+              if (is_array($otherParams) && !empty($otherParams)) {
+                $contactData = array_merge($contactData, $otherParams[$profKey]);
               }
             
               $contactsCustomParams = array();
-              $$createContactsResult = civicrm_api( 'contact', 'create', $contactData );
+              $$createContactsResult = civicrm_api('contact', 'create', $contactData);
             }
             $child   = $pContactIds[$pID];
             $current = $createContactsResult1['id'];
             $other = $firstEmergency = $secondEmergency = null;
-            if(isset($createContactsResult2)) {
+            if (isset($createContactsResult2)) {
               $other   = $createContactsResult2['id'];
             }
-            if($createContactsResult3) {
+            if ($createContactsResult3) {
               $firstEmergency  = $createContactsResult3['id'];
             }
-            if($createContactsResult4) {
+            if ($createContactsResult4) {
               $secondEmergency = $createContactsResult4['id'];
             }
-            if( $is_shareAdd == 1 ) { 
-              if ( $form->_submitValues['last_name'.$profArray['Current User Profile']] == $form->_submitValues['last_name2'] ) {
+            if ($is_shareAdd == 1) { 
+              if ($form->_submitValues['last_name'.$profArray['Current User Profile']] == $form->_submitValues['last_name2']) {
                 $houseHoldName = $form->_submitValues['first_name'.$profArray['Current User Profile']].' & '.$form->_submitValues['first_name'.$profArray['Other Parent Or Guardian']].' '.$form->_submitValues['last_name'.$profArray['Current User Profile']].' Household';
               } else {
                 $houseHoldName = $form->_submitValues['first_name'.$profArray['Current User Profile']].' '.$form->_submitValues['last_name'.$profArray['Current User Profile']].', '.$form->_submitValues['first_name'.$profArray['Other Parent Or Guardian']].' '.$form->_submitValues['last_name'.$profArray['Other Parent Or Guardian']].' Household';
               }
               
               $createHouseholdParams = array(
-                                             'household_name' => $houseHoldName,
-                                             'contact_type'   => 'Household',
-                                             'email'          => $form->_submitValues['email-Primary'.$profArray['Current User Profile']],
-                                             'version'        => 3
-                                             );
-              $getHouseholdResult = civicrm_api( 'contact', 'get', $createHouseholdParams ); 
-              if( !empty($getHouseholdResult['values']) ) {
+                                         'household_name' => $houseHoldName,
+                                         'contact_type' => 'Household',
+                                         'email' => $form->_submitValues['email-Primary'.$profArray['Current User Profile']],
+                                         'version' => 3);
+              $getHouseholdResult = civicrm_api('contact', 'get', $createHouseholdParams); 
+              if (!empty($getHouseholdResult['values'])) {
                 $createHouseholdParams['id'] = $getHouseholdResult['id'];
               }
-              if( !empty( $shareOtherParams )) {
-                unset( $shareOtherParams['id'] );
-                $createHouseholdParams= array_merge( $createHouseholdParams, $shareOtherParams );
+              if (!empty( $shareOtherParams)) {
+                unset($shareOtherParams['id']);
+                $createHouseholdParams= array_merge($createHouseholdParams, $shareOtherParams);
               }
-              $createHouseholdResult = civicrm_api( 'contact', 'create', $createHouseholdParams );  
+              $createHouseholdResult = civicrm_api('contact', 'create', $createHouseholdParams);  
         
               $household = $createHouseholdResult['id'];
               $householdHeadRelationshipParams = array( 
-                                                       'contact_id_a'         => $current,
-                                                       'contact_id_b'         => $household,
-                                                       'relationship_type_id' => $relationshipTypes['Head of Household for'],
-                                                       'is_permission_a_b'    => 1,
-                                                       'is_permission_b_a'    => 1,
-                                                       'is_active'            => 1,
-                                                       'version'              => 3,
-                                                        );
+                                                   'contact_id_a' => $current,
+                                                   'contact_id_b' => $household,
+                                                   'relationship_type_id' => $relationshipTypes['Head of Household for'],
+                                                   'is_permission_a_b' => 1,
+                                                   'is_permission_b_a' => 1,
+                                                   'is_active' => 1,
+                                                   'version' => 3);
           
-              $householdCurrentHeadRelationshipResult = civicrm_api( 'relationship', 'create', $householdHeadRelationshipParams );
+              $householdCurrentHeadRelationshipResult = civicrm_api('relationship', 'create', $householdHeadRelationshipParams);
           
               $householdHeadRelationshipParams['contact_id_a'] = $other;
               $householdHeadRelationshipParams['relationship_type_id'] = $relationshipTypes['Household Member of'];
-              $householdOtherHeadRelationshipResult = civicrm_api( 'relationship', 'create', $householdHeadRelationshipParams );
+              $householdOtherHeadRelationshipResult = civicrm_api('relationship', 'create', $householdHeadRelationshipParams);
           
               $householdMemberRelationshipParams = array( 
-                                                         'contact_id_a'         => $child,
-                                                         'contact_id_b'         => $household,
-                                                         'relationship_type_id' => $relationshipTypes['Household Member of'],
-                                                         'is_permission_b_a'    => 1,
-                                                         'is_active'            => 1,
-                                                         'version'              => 3,
-                                                          );
+                                                     'contact_id_a' => $child,
+                                                     'contact_id_b' => $household,
+                                                     'relationship_type_id' => $relationshipTypes['Household Member of'],
+                                                     'is_permission_b_a' => 1,
+                                                     'is_active' => 1,
+                                                     'version' => 3);
         
-              $householdMemberRelationshipResult = civicrm_api( 'relationship', 'create', $householdMemberRelationshipParams );
+              $householdMemberRelationshipResult = civicrm_api('relationship', 'create', $householdMemberRelationshipParams);
             }
       
-            if( $is_spouse == 1 ) {
+            if ($is_spouse == 1) {
               $spouseRelationshipParams = array( 
-                                                'contact_id_a'         => $current,
-                                                'contact_id_b'         => $other,
-                                                'relationship_type_id' => $relationshipTypes['Spouse of'],
-                                                'is_active'            => 1,
-                                                'is_permission_a_b'    => 1,
-                                                'is_permission_b_a'    => 1,
-                                                'version'              => 3,
-                                                 );
-              $spouseRelationshipResult = civicrm_api( 'relationship', 'create', $spouseRelationshipParams);
+                                            'contact_id_a' => $current,
+                                            'contact_id_b' => $other,
+                                            'relationship_type_id' => $relationshipTypes['Spouse of'],
+                                            'is_active' => 1,
+                                            'is_permission_a_b' => 1,
+                                            'is_permission_b_a' => 1,
+                                            'version' => 3);
+              $spouseRelationshipResult = civicrm_api('relationship', 'create', $spouseRelationshipParams);
             }
        
             $parentRelationshipParams = array( 
-                                              'contact_id_a'         => $child,
-                                              'contact_id_b'         => $current,
-                                              'relationship_type_id' => $relationshipTypes['Child of'],
-                                              'is_active'            => 1,
-                                              'is_permission_b_a'    => 1,
-                                              'version'              => 3,
-                                               );
+                                          'contact_id_a' => $child,
+                                          'contact_id_b' => $current,
+                                          'relationship_type_id' => $relationshipTypes['Child of'],
+                                          'is_active' => 1,
+                                          'is_permission_b_a' => 1,
+                                          'version' => 3);
       
-            $parentRelationshipResult = civicrm_api( 'relationship', 'create', $parentRelationshipParams );
+            $parentRelationshipResult = civicrm_api('relationship', 'create', $parentRelationshipParams);
       
             // create relationship between child and other parent
-            if( $other ) {
+            if ($other) {
               $otherParentRelationshipParams = array( 
-                                                     'contact_id_a'         => $child,
-                                                     'contact_id_b'         => $other,
-                                                     'relationship_type_id' => 1,
-                                                     'is_active'            => 1,
-                                                     'is_permission_b_a'    => 1,
-                                                     'version'              => 3,
-                                                      );
+                                                 'contact_id_a' => $child,
+                                                 'contact_id_b' => $other,
+                                                 'relationship_type_id' => 1,
+                                                 'is_active' => 1,
+                                                 'is_permission_b_a' => 1,
+                                                 'version' => 3);
       
-              $otherParentRelationshipResult = civicrm_api( 'relationship', 'create', $otherParentRelationshipParams );
+              $otherParentRelationshipResult = civicrm_api('relationship', 'create', $otherParentRelationshipParams);
             }
-            if( $firstEmergency && $secondEmergency ) {
+            if ($firstEmergency && $secondEmergency) {
               // create a new relationship type 'is emergency contact of'
               $emergencyTypeParams = array( 
-                                           'name_a_b'       => 'emergency contact is',
-                                           'name_b_a'       => 'emergency contact for',
-                                           'contact_type_a' => 'Individual',
-                                           'contact_type_b' => 'Individual',
-                                           'is_reserved'    => 0,
-                                           'is_active'      => 1,
-                                           'version'        => 3,
-                                            );
+                                       'name_a_b' => 'emergency contact is',
+                                       'name_b_a' => 'emergency contact for',
+                                       'contact_type_a' => 'Individual',
+                                       'contact_type_b' => 'Individual',
+                                       'is_reserved' => 0,
+                                       'is_active' => 1,
+                                       'version' => 3);
       
-              $getEmergencyTypeResult = civicrm_api( 'relationship_type', 'get', $emergencyTypeParams );
-              if( $getEmergencyTypeResult['count'] == 0 ) {
-                $createEmergencyTypeResult = civicrm_api( 'relationship_type', 'create', $emergencyTypeParams );
+              $getEmergencyTypeResult = civicrm_api('relationship_type', 'get', $emergencyTypeParams);
+              if ($getEmergencyTypeResult['count'] == 0) {
+                $createEmergencyTypeResult = civicrm_api('relationship_type', 'create', $emergencyTypeParams);
                 $relId = $createEmergencyTypeResult['id'];
-              }
-              else {
+              } else {
                 $relId = $getEmergencyTypeResult['id'];
               }
             }
             // create relationship of first emergency contact and child
-            if( $firstEmergency ) {
+            if ($firstEmergency) {
               $emergency1ChildRelationshipParams = array( 
-                                                         'contact_id_a'         => $child,
-                                                         'contact_id_b'         => $firstEmergency,
-                                                         'relationship_type_id' => $relId.'_a_b',
-                                                         'is_active'            => 1,
-                                                         'contact_check'        => array( $firstEmergency => $firstEmergency ),
-                                                          );
+                                                     'contact_id_a' => $child,
+                                                     'contact_id_b' => $firstEmergency,
+                                                     'relationship_type_id' => $relId.'_a_b',
+                                                     'is_active' => 1,
+                                                     'contact_check' => array($firstEmergency => $firstEmergency));
               $ids['contact'] = $child;
               CRM_Contact_BAO_Relationship::create(&$emergency1ChildRelationshipParams, &$ids);
             }
-            if( $secondEmergency ) {
+            if ($secondEmergency) {
               // create relationship of second emergency contact and child
               $emergency2ChildRelationshipParams = array( 
-                                                         'contact_id_a'         => $child,
-                                                         'contact_id_b'         => $secondEmergency,
-                                                         'relationship_type_id' => $relId.'_a_b',
-                                                         'is_active'            => 1,
-                                                         'contact_check'        => array( $secondEmergency => $secondEmergency ),
-                                                          );
+                                                     'contact_id_a' => $child,
+                                                     'contact_id_b' => $secondEmergency,
+                                                     'relationship_type_id' => $relId.'_a_b',
+                                                     'is_active' => 1,
+                                                     'contact_check' => array($secondEmergency => $secondEmergency));
 
               CRM_Contact_BAO_Relationship::create(&$emergency2ChildRelationshipParams, &$ids);
             }
@@ -898,20 +759,20 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
             $emergency1ChildRelationshipParams['contact_id_a'] = $otherChildId;
             $emergency2ChildRelationshipParams['contact_id_a'] = $otherChildId;
             $householdMemberRelationshipParams['contact_id_a'] = $otherChildId;
-            $parentRelationshipResult      = civicrm_api( 'relationship', 'create', $parentRelationshipParams );
-            if($otherParentRelationshipParams) {
-              $otherParentRelationshipResult = civicrm_api( 'relationship', 'create', $otherParentRelationshipParams );
+            $parentRelationshipResult      = civicrm_api('relationship', 'create', $parentRelationshipParams);
+            if ($otherParentRelationshipParams) {
+              $otherParentRelationshipResult = civicrm_api('relationship', 'create', $otherParentRelationshipParams);
             } 
-            if($emergency1ChildRelationshipParams) {
+            if ($emergency1ChildRelationshipParams) {
               CRM_Contact_BAO_Relationship::create(&$emergency1ChildRelationshipParams, &$ids);
             }
-            if($emergency2ChildRelationshipParams) {
+            if ($emergency2ChildRelationshipParams) {
               CRM_Contact_BAO_Relationship::create(&$emergency2ChildRelationshipParams, &$ids);
             }
-            if ( $is_shareAdd == 1 ) {
-              $householdMemberRelationshipResult = civicrm_api( 'relationship', 'create', $householdMemberRelationshipParams );
+            if ($is_shareAdd == 1) {
+              $householdMemberRelationshipResult = civicrm_api('relationship', 'create', $householdMemberRelationshipParams);
               $shareOtherParams['id'] = $otherChildId;
-              $childAddress = civicrm_api( 'contact', 'create', $shareOtherParams );
+              $childAddress = civicrm_api('contact', 'create', $shareOtherParams);
             }
           }
         }
@@ -920,30 +781,30 @@ function eer_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
   }
 } 
 
-function eer_civicrm_postProcess( $formName, &$form  ) { 
+function eer_civicrm_postProcess($formName, &$form) { 
                 
-  if( $formName == 'CRM_Event_Form_ManageEvent_Registration' ) {                    
+  if ($formName == 'CRM_Event_Form_ManageEvent_Registration') {                    
     $eventId = $form->_id;
     $isenhanced = $form->_submitValues['is_enhanced'];
-    if( !$isenhanced ) { 
+    if (!$isenhanced) { 
       $isenhanced = 0;
-      CRM_Core_DAO::executeQuery( "DELETE FROM civicrm_event_enhanced_profile WHERE event_id = $eventId" );
-      CRM_Core_DAO::executeQuery( "DELETE FROM civicrm_event_enhanced WHERE event_id = $eventId" );
+      CRM_Core_DAO::executeQuery("DELETE FROM civicrm_event_enhanced_profile WHERE event_id = $eventId");
+      CRM_Core_DAO::executeQuery("DELETE FROM civicrm_event_enhanced WHERE event_id = $eventId");
     }
-    if( $isenhanced ) {
-      $isEnhanced = CRM_Core_DAO::singleValueQuery( "SELECT id FROM civicrm_event_enhanced WHERE event_id = $eventId" );
+    if ($isenhanced) {
+      $isEnhanced = CRM_Core_DAO::singleValueQuery("SELECT id FROM civicrm_event_enhanced WHERE event_id = $eventId");
       if (empty($isEnhanced) ) {
         $newIndProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'new_individual', 'id', 'name');
         $curUserProfile = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_current_user_profile', 'id', 'name');
         $otherPG = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_other_parent_or_guardian', 'id', 'name');
         $firstEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_first_emergency_contacts', 'id', 'name');
         $secondEmerContacts = CRM_Core_DAO::getFieldValue('CRM_Core_DAO_UFGroup', 'biz_jmaconsulting_eer_second_emergency_contacts', 'id', 'name');
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced( id, event_id, is_enhanced ) values( null,'$eventId','$isenhanced' )" );
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $newIndProfile, 2, 1, null,0)" );
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $curUserProfile, 1, 1, null,0)" );
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $otherPG, 2, 2, null,0)" );
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $firstEmerContacts, 2, 3, null,0)" );
-        CRM_Core_DAO::executeQuery( "INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $secondEmerContacts, 2, 4, null,0)" );
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced( id, event_id, is_enhanced ) values( null,'$eventId','$isenhanced' )");
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $newIndProfile, 2, 1, null,0)");
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $curUserProfile, 1, 1, null,0)");
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $otherPG, 2, 2, null,0)");
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $firstEmerContacts, 2, 3, null,0)");
+        CRM_Core_DAO::executeQuery("INSERT INTO civicrm_event_enhanced_profile(event_id, uf_group_id, area, weight, label, shares_address ) values({$eventId}, $secondEmerContacts, 2, 4, null,0)");
       }
     }
   }
