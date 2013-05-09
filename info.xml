@@ -17,7 +17,7 @@
   <version>1.0.beta1</version>
   <develStage>beta</develStage>
   <compatibility>
-    <ver>4.2</ver>
+    <ver>4.3.x</ver>
   </compatibility>
   <comments>Two parents with shared or different addresses, two emergency contacts with separate addresses, one or more children being registered, and a household contact are created and / or updated using the normal CiviCRM duplicate identification approaches. A checkbox allows the second parent to be identified as a spouse of the first parent. Appropriate permissions for one contact editting another are also created (eg parents can edit kids' info). The core and custom fields collected for each contact are determined by editting the fields in custom profiles. Module was authored by Mayur Jadhav and Joe Murray of JMA Consulting with the generous sponsorship of Pogstone.</comments>
   <civix>
