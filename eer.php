@@ -113,7 +113,7 @@ function eer_civicrm_managed(&$entities) {
 }
 
 function eer_civicrm_buildForm($formName, &$form) {
-  $childName  = array(1 => 'Second', 2 => 'Third', 3 => 'Fourth', 4 => 'Fifth', 5 => 'Sixth', 6 => 'Seventh');
+  $childName  = array(1 => 'Second', 2 => 'Third', 3 => 'Fourth', 4 => 'Fifth', 5 => 'Sixth', 6 => 'Seventh', 7 => 'Eighth', 8 => 'Nineth', 9 => 'Tenth');
   if ($formName == 'CRM_Event_Form_Registration_AdditionalParticipant') {
     $is_enhanced = CRM_Core_DAO::singleValueQuery("SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}");
     if ($is_enhanced) {
@@ -163,7 +163,46 @@ function eer_civicrm_buildForm($formName, &$form) {
           $postGroupTitle[$profileID]['groupTitle'] = $value['groupTitle'];
           if (array_key_exists($newKey, $contacts[0])) {
             $customFields[$newKey] = $contacts[0][$newKey];
-            // FIXME for multi choice custom fields (eg. select, radio, checkbox, multi select)
+            if (!empty($form->_elements[$form->_elementIndex[$key]]->_elements)) {
+              $multipleData = array();
+              if (is_array($contacts[0][$newKey])) {
+                foreach ($contacts[0][$newKey] as $multiKey => $multiVal) {
+                  if (!empty($multiVal)) {
+                    foreach ($form->_elements[$form->_elementIndex[$key]]->_elements as $elementKey => $elementValue) {
+                      if ($elementValue->_attributes['id'] == $multiKey) {
+                        $multipleData[] = $elementValue->_text;
+                      }
+                    }
+                  }
+                }
+                $contacts[0][$newKey] = implode(', ', $multipleData);
+              } else {
+                foreach ($form->_elements[$form->_elementIndex[$key]]->_elements as $elementKey => $elementValue) {
+                  if ($elementValue->_attributes['value'] ==$contacts[0][$newKey] ) { 
+                    $contacts[0][$newKey] = $elementValue->_text;
+                  }
+                }
+              }
+            }
+            elseif (!empty($form->_elements[$form->_elementIndex[$key]]->_options)) {
+              $multipleData = array();
+              if (is_array($contacts[0][$newKey])) {
+                foreach ($form->_elements[$form->_elementIndex[$key]]->_options as $elementKey => $elementValue) {
+                  foreach ($contacts[0][$newKey] as $multiKey => $multiVal) {
+                    if ($elementValue['attr']['value'] == $multiVal) {
+                      $multipleData[] = $elementValue['text'];
+                    }
+                  }
+                }
+                $contacts[0][$newKey] = implode(', ', $multipleData);
+              } else {
+                foreach ($form->_elements[$form->_elementIndex[$key]]->_options as $elementKey => $elementValue) {
+                  if ($elementValue['attr']['value'] ==$contacts[0][$newKey] ) { 
+                    $contacts[0][$newKey] = $elementValue['text'];
+                  }
+                }
+              }
+            } 
             $customPost[$profileID][$value['title']] = $contacts[0][$newKey];
           }
         }
@@ -196,6 +235,48 @@ function eer_civicrm_buildForm($formName, &$form) {
             $newKey = $fieldKey.$profArray[$fieldValues['groupTitle']];
           }
         }
+        //$customFields[$newKey] = $contacts[0][$newKey];
+        if (!empty($form->_elements[$form->_elementIndex[$fieldKey]]->_elements)) {
+          $multipleData = array();
+          if (is_array($contacts[0][$newKey])) {
+            foreach ($contacts[0][$newKey] as $multiKey => $multiVal) {
+              if (!empty($multiVal)) {
+                foreach ($form->_elements[$form->_elementIndex[$fieldKey]]->_elements as $elementKey => $elementValue) {
+                  if ($elementValue->_attributes['id'] == $multiKey) {
+                    $multipleData[] = $elementValue->_text;
+                  }
+                }
+              }
+            }
+            $contacts[0][$newKey] = implode(', ', $multipleData);
+          } else {
+            foreach ($form->_elements[$form->_elementIndex[$fieldKey]]->_elements as $elementKey => $elementValue) {
+              if ($elementValue->_attributes['value'] == $contacts[0][$newKey]) {
+                $contacts[0][$newKey] = $elementValue->_text;
+              }
+            }
+          }
+        }
+        elseif (!empty($form->_elements[$form->_elementIndex[$fieldKey]]->_options)) {
+          $multipleData = array();
+          if (is_array($contacts[0][$newKey])) {
+            foreach ($form->_elements[$form->_elementIndex[$fieldKey]]->_options as $elementKey => $elementValue) {
+              foreach ($contacts[0][$newKey] as $multiKey => $multiVal) {
+                if ($elementValue['attr']['value'] == $multiVal) {
+                  $multipleData[] = $elementValue['text'];
+                }
+              }
+            }
+            $contacts[0][$newKey] = implode(', ', $multipleData);
+          } else {
+            foreach ($form->_elements[$form->_elementIndex[$fieldKey]]->_options as $elementKey => $elementValue) {
+              if ($elementValue['attr']['value'] == $contacts[0][$newKey]) {
+                $contacts[0][$newKey] = $elementValue['text'];
+              }
+            }
+          }
+        }
+        //$customPost[$profileID][$value['title']] = $contacts[0][$newKey];
         $customPre[$fieldValues['title']] = $contacts[0][$newKey];
         $customFields[$newKey] = $contacts[0][$newKey];
         $form->_elements[$form->_elementIndex[$fieldKey]]->_name = $newKey;
@@ -210,11 +291,52 @@ function eer_civicrm_buildForm($formName, &$form) {
           $addParticipant = $contactKey+1;
           foreach ($contactValue as $contKey => $contVal) {
             if (array_key_exists($contKey, $form->_elementIndex)) {
-              if (array_key_exists('_elements', (array) $form->_elements[$form->_elementIndex[$contKey]])) {
-
-                //FIXME for additional profile custom values 
-
-              } else {
+              if (!empty($form->_elements[$form->_elementIndex[$contKey]]->_elements)) {
+                $multipleData = array();
+                if (is_array($contVal)) {
+                  foreach ($contVal as $multiKey => $multiVal) {
+                    if (!empty($multiVal)) {
+                      foreach ($form->_elements[$form->_elementIndex[$contKey]]->_elements as $elementKey => $elementValue) {
+                        if ($elementValue->_attributes['id'] == $multiKey) {
+                          $multipleData[] = $elementValue->_text;
+                        }
+                      }
+                    }
+                  }
+                  //$contacts[0][$newKey] = implode(', ', $multipleData);
+                  $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = implode(', ', $multipleData);
+                } else {
+                  foreach ($form->_elements[$form->_elementIndex[$contKey]]->_elements as $elementKey => $elementValue) {
+                    if ($elementValue->_attributes['value'] == $contVal) {
+                      $contacts[0][$newKey] = $elementValue->_text;
+                      $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $elementValue->_text;
+                    }
+                  }
+                }
+              }
+              elseif (!empty($form->_elements[$form->_elementIndex[$contKey]]->_options)) {
+                $multipleData = array();
+                if (is_array($contVal)) {
+                  foreach ($form->_elements[$form->_elementIndex[$contKey]]->_options as $elementKey => $elementValue) {
+                    foreach ($contVal as $multiKey => $multiVal) {
+                      if ($elementValue['attr']['value'] == $multiVal) {
+                        $multipleData[] = $elementValue['text'];
+                        $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $elementValue['text'];
+                      }
+                    }
+                  }
+                  //$contacts[0][$newKey] = implode(', ', $multipleData);
+                  $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = implode(', ', $multipleData);
+                } else {
+                  foreach ($form->_elements[$form->_elementIndex[$contKey]]->_options as $elementKey => $elementValue) {
+                    if ($elementValue['attr']['value'] == $contVal) {
+                      $contacts[0][$newKey] = $elementValue['text'];
+                      $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = $elementValue['text'];
+                    }
+                  }
+                }
+              }
+              else {
                 foreach ($form->_elements[$form->_elementIndex[$contKey]] as $addKey  => $addVal) {
                   if ($form->_elements[$form->_elementIndex[$contKey]]->_type != 'hidden') {
                     if (!empty($contVal) && !empty($form->_elements[$form->_elementIndex[$contKey]]->_label)) {
@@ -469,7 +591,7 @@ function eer_civicrm_validate($formName, &$fields, &$files, &$form) {
 function eer_civicrm_pre($op, $objectName, $id, &$params) {
   if ($objectName == 'Individual' && $op == 'edit') {
     // unset contact id to create new conatct for child 
-    if($params['contact_id'] == $_SESSION['CiviCRM']['userID'] && !$params['flag']) {
+    if($params['contact_id'] == $_SESSION['CiviCRM']['userID'] && !CRM_Utils_Array::value('flag', $params)) {
       unset($params['contact_id']);
     }
   }
@@ -562,7 +684,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                   $addressParams['location_type_id'] = 1;
                   $addressResult = civicrm_api( 'address', 'get', $addressParams );
                   if (!empty($addressResult['values'])) {
-                    $otherParams[$profKey]['api.address.create']['id'] = $addressResult['id'];
+                    $otherParams[$profKey]['api.address.create']['id'] = CRM_Utils_Array::value('id', $addressResult);
                   }
                 }
               }
@@ -599,7 +721,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                 $addressGet['version']    =  3;
                 $addressGet['location_type_id'] = 1;
                 $result = civicrm_api('address','get' , $addressGet);
-                $otherParams[$profKey]['api.address.create']['master_id'] = $result['id'];
+                $otherParams[$profKey]['api.address.create']['master_id'] = CRM_Utils_Array::value('id', $result);
                 $shareOtherParams = $otherParams[$profKey];
                 $shareOtherParams['id'] = $pContactIds[$pID];
                 $shareOtherParams['version'] = 3;
