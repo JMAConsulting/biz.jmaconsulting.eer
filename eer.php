@@ -235,7 +235,6 @@ function eer_civicrm_buildForm($formName, &$form) {
             $newKey = $fieldKey.$profArray[$fieldValues['groupTitle']];
           }
         }
-        //$customFields[$newKey] = $contacts[0][$newKey];
         if (!empty($form->_elements[$form->_elementIndex[$fieldKey]]->_elements)) {
           $multipleData = array();
           if (is_array($contacts[0][$newKey])) {
@@ -276,7 +275,6 @@ function eer_civicrm_buildForm($formName, &$form) {
             }
           }
         }
-        //$customPost[$profileID][$value['title']] = $contacts[0][$newKey];
         $customPre[$fieldValues['title']] = $contacts[0][$newKey];
         $customFields[$newKey] = $contacts[0][$newKey];
         $form->_elements[$form->_elementIndex[$fieldKey]]->_name = $newKey;
@@ -303,7 +301,6 @@ function eer_civicrm_buildForm($formName, &$form) {
                       }
                     }
                   }
-                  //$contacts[0][$newKey] = implode(', ', $multipleData);
                   $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = implode(', ', $multipleData);
                 } else {
                   foreach ($form->_elements[$form->_elementIndex[$contKey]]->_elements as $elementKey => $elementValue) {
@@ -325,7 +322,6 @@ function eer_civicrm_buildForm($formName, &$form) {
                       }
                     }
                   }
-                  //$contacts[0][$newKey] = implode(', ', $multipleData);
                   $additionalParticipants[$addParticipant]['additionalCustomPre'][$form->_elements[$form->_elementIndex[$contKey]]->_label] = implode(', ', $multipleData);
                 } else {
                   foreach ($form->_elements[$form->_elementIndex[$contKey]]->_options as $elementKey => $elementValue) {
@@ -585,16 +581,19 @@ function eer_civicrm_validate($formName, &$fields, &$files, &$form) {
       $errors['is_enhanced'] = ts('The Enhanced Event Registration module is misconfigured - please enable all profiles used in the configuration.');
     }
   }
-  return empty($errors) ? TRUE : $errors;
-}
-
-function eer_civicrm_pre($op, $objectName, $id, &$params) {
-  if ($objectName == 'Individual' && $op == 'edit') {
-    // unset contact id to create new conatct for child 
-    if($params['contact_id'] == $_SESSION['CiviCRM']['userID'] && !CRM_Utils_Array::value('flag', $params)) {
-      unset($params['contact_id']);
+  if( $formName == 'CRM_Event_Form_Registration_Register' ) {
+    $isenhanced = CRM_Core_DAO::singleValueQuery( "SELECT is_enhanced FROM civicrm_event_enhanced WHERE event_id = {$form->_eventId}" );
+    if ($isenhanced) {
+      foreach ($form->_fields as $name => $fld) {
+        if ($fld['is_required'] &&
+          CRM_Utils_System::isNull(CRM_Utils_Array::value($name, $fields))
+        ) {
+          $errors[$name] = ts('%1 is a required field.', array(1 => $fld['title']));
+        }
+      }
     }
   }
+  return empty($errors) ? TRUE : $errors;
 }
 
 function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
@@ -657,29 +656,16 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                 $createContactsResult = 'createContactsResult'.$profKey;
                 $contactsCustomParams = $otherParams = array();
                 $checkData = array(
-                               'first_name' => $form->_submitValues['first_name'.$profKey] ,
-                               'last_name' => $form->_submitValues['last_name'.$profKey],
-                               'contact_type' => 'Individual',
-                               'email' => $form->_submitValues['email-Primary'.$profKey],
-                               'version' => 3);
-                $checkData['contact_id'] = NULL;
-                if ($profKey == 1) {
-                  $checkData['contact_id'] = $_SESSION['CiviCRM']['userID'];
-                  $emailPrams['version'] = 3;
-                  $emailPrams['contact_id'] = $_SESSION['CiviCRM']['userID'];
-                  $emailPrams['is_primary'] = 1;
-                  $emailResult = civicrm_api('email', 'get', $emailPrams);
-                  if (!empty($emailResult['values'])) {
-                    $emailPrams['id'] = $emailResult['id'];
-                  }
-                  $emailPrams['email'] = $form->_submitValues['email-Primary'.$profKey];
-                  $emailCreateResult = civicrm_api('email', 'create', $emailPrams);
-                  $checkData['flag'] = TRUE;
-                }
+                                   'first_name' => $form->_submitValues['first_name'.$profKey] ,
+                                   'last_name' => $form->_submitValues['last_name'.$profKey],
+                                   'contact_type' => 'Individual',
+                                   'email' => $form->_submitValues['email-Primary'.$profKey],
+                                   'version' => 3);
+
                 $checkDupResult = civicrm_api('contact', 'get', $checkData);
                 if (!empty($checkDupResult['values'])) {
-                  $checkData['id'] = $checkDupResult['id'];
-                  $addressParams['contact_id'] = $checkDupResult['id'];
+                  $checkData['id'] = CRM_Utils_Array::value('id', $checkDupResult);
+                  $addressParams['contact_id'] = CRM_Utils_Array::value('id', $checkDupResult);
                   $addressParams['version']    = 3;
                   $addressParams['location_type_id'] = 1;
                   $addressResult = civicrm_api( 'address', 'get', $addressParams );
@@ -700,16 +686,10 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                   if (! strstr($contactsKeys, 'custom') && ! strstr($contactsKeys, 'first_name') && ! strstr($contactsKeys, 'last_name') && ! strstr($contactsKeys, 'email')) {
                     $keyResult = explode('-', $contactsKeys);
                     $newKey = $keyResult[0];
-                    if ($profKey == 1) {
-                      $otherParams[$profKey]['api.address.create'][$newKey] = $form->_submitValues[$contactsKeys];
+                    if (strstr($contactsKeys, (string)$profKey)) {
+                      $otherParams[$profKey]['api.address.create'][$newKey] = $contactsValues;
                       if (strstr($contactsKeys, 'state_province')) {
-                        $otherParams[$profKey]['api.address.create']['state_province_id'] = $form->_submitValues[$contactsKeys];
-                      }
-                      $otherParams[$profKey]['api.address.create']['location_type_id'] = 1;
-                    } elseif (strstr($contactsKeys, (string)$profKey)) {
-                      $otherParams[$profKey]['api.address.create'][$newKey] = $contactsValues; 
-                      if (strstr($contactsKeys, 'state_province')) {
-                        $otherParams[$profKey]['api.address.create']['state_province_id'] = $form->_submitValues[$contactsKeys];
+                        $otherParams[$profKey]['api.address.create']['state_province_id'] = $contactsValues;
                       }
                       $otherParams[$profKey]['api.address.create']['location_type_id'] = 1;
                     }
@@ -721,7 +701,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                 $addressGet['version']    =  3;
                 $addressGet['location_type_id'] = 1;
                 $result = civicrm_api('address','get' , $addressGet);
-                $otherParams[$profKey]['api.address.create']['master_id'] = CRM_Utils_Array::value('id', $result);
+                $otherParams[$profKey]['api.address.create']['master_id'] = $result['id'];
                 $shareOtherParams = $otherParams[$profKey];
                 $shareOtherParams['id'] = $pContactIds[$pID];
                 $shareOtherParams['version'] = 3;
@@ -734,7 +714,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
               if (is_array($otherParams) && !empty($otherParams)) {
                 $contactData = array_merge($contactData, $otherParams[$profKey]);
               }
-            
+
               $contactsCustomParams = array();
               $$createContactsResult = civicrm_api('contact', 'create', $contactData);
             }
@@ -762,7 +742,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                                          'contact_type' => 'Household',
                                          'email' => $form->_submitValues['email-Primary'.$profArray['Current User Profile']],
                                          'version' => 3);
-              $getHouseholdResult = civicrm_api('contact', 'get', $createHouseholdParams); 
+              $getHouseholdResult = civicrm_api('contact', 'get', $createHouseholdParams);
               if (!empty($getHouseholdResult['values'])) {
                 $createHouseholdParams['id'] = $getHouseholdResult['id'];
               }
@@ -770,7 +750,7 @@ function eer_civicrm_post($op, $objectName, $objectId, &$objectRef) {
                 unset($shareOtherParams['id']);
                 $createHouseholdParams= array_merge($createHouseholdParams, $shareOtherParams);
               }
-              $createHouseholdResult = civicrm_api('contact', 'create', $createHouseholdParams);  
+              $createHouseholdResult = civicrm_api('contact', 'create', $createHouseholdParams);
         
               $household = $createHouseholdResult['id'];
               $householdHeadRelationshipParams = array( 
